@@ -339,12 +339,12 @@ async function swipeUp(this: ADB, windowDumpsys: string): Promise<void> {
  * @returns
  */
 function isScreenOnFully(dumpsys: string): boolean {
-  const m = /mScreenOnFully=\w+/gi.exec(dumpsys);
-  return (
-    !m || // if information is missing we assume screen is fully on
-    (m && m.length > 0 && m[0].split('=')[1] === 'true') ||
-    false
-  );
+  const matches = dumpsys.match(/mScreenOnFully=\w+/gi);
+  if (!matches) {
+    // if information is missing we assume screen is fully on
+    return true;
+  }
+  return matches.some((m) => m.split('=')[1]?.toLowerCase() === 'true');
 }
 
 /**

@@ -206,6 +206,62 @@ describe('lock management', function () {
       assert.strictEqual(await isShowingLockscreen(dumpsys), false);
     });
   });
+
+  describe('isScreenLocked and lock on multi-display devices', function () {
+    const awakeMultiDisplayWindowDumpsys = `
+      DisplayPolicy (displayId=1)
+        mScreenOnEarly=false mScreenOnFully=false mKeyguardDrawComplete=false
+      DisplayPolicy (displayId=0)
+        mScreenOnEarly=true mScreenOnFully=true mKeyguardDrawComplete=true
+        mShowingLockscreen=false mDreamingLockscreen=false
+        screenState=SCREEN_STATE_ON
+    `;
+    const lockedMultiDisplayWindowDumpsys = `
+      DisplayPolicy (displayId=1)
+        mScreenOnEarly=false mScreenOnFully=false mKeyguardDrawComplete=false
+      DisplayPolicy (displayId=0)
+        mScreenOnEarly=false mScreenOnFully=false mKeyguardDrawComplete=false
+        mShowingLockscreen=true mDreamingLockscreen=false
+        screenState=SCREEN_STATE_OFF
+    `;
+
+    it('should return false when at least one display has mScreenOnFully=true', async function () {
+      const adb = new ADB();
+      const shell = sandbox.stub(adb, 'shell');
+      shell.withArgs(['dumpsys', 'window']).resolves(awakeMultiDisplayWindowDumpsys);
+      shell.withArgs(['dumpsys', 'power']).resolves('  mWakefulness=Awake\n');
+      assert.strictEqual(await adb.isScreenLocked(), false);
+    });
+
+    it('should return true when all displays have mScreenOnFully=false', async function () {
+      const adb = new ADB();
+      const shell = sandbox.stub(adb, 'shell');
+      shell.withArgs(['dumpsys', 'window']).resolves(lockedMultiDisplayWindowDumpsys);
+      shell.withArgs(['dumpsys', 'power']).resolves('  mWakefulness=Dozing\n');
+      assert.strictEqual(await adb.isScreenLocked(), true);
+    });
+
+    it('should press power key when locking an awake multi-display device', async function () {
+      const adb = new ADB();
+      const shell = sandbox.stub(adb, 'shell');
+      shell
+        .withArgs(['dumpsys', 'window'])
+        .onFirstCall()
+        .resolves(awakeMultiDisplayWindowDumpsys)
+        .onSecondCall()
+        .resolves(lockedMultiDisplayWindowDumpsys);
+      shell
+        .withArgs(['dumpsys', 'power'])
+        .onFirstCall()
+        .resolves('  mWakefulness=Awake\n')
+        .onSecondCall()
+        .resolves('  mWakefulness=Dozing\n');
+      const keyevent = sandbox.stub(adb, 'keyevent').resolves();
+
+      await adb.lock();
+      sinon.assert.calledOnceWithExactly(keyevent, 26);
+    });
+  });
 });
 
 // Model remote POSIX shell parsing independently of the quoting helper.
